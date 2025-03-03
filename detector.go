@@ -19,7 +19,6 @@ package lingua
 import (
 	"archive/zip"
 	"bytes"
-	"embed"
 	"fmt"
 	"github.com/pemistahl/lingua-go/serialization"
 	"github.com/shopspring/decimal"
@@ -27,6 +26,7 @@ import (
 	"golang.org/x/exp/slices"
 	"google.golang.org/protobuf/proto"
 	"io"
+	"io/fs"
 	"math"
 	"sort"
 	"strings"
@@ -34,8 +34,11 @@ import (
 	"unicode/utf8"
 )
 
-//go:embed language-models
-var languageModels embed.FS
+var languageModels = map[string]fs.ReadFileFS{}
+
+func Register(iosCode string, fileFS fs.ReadFileFS) {
+	languageModels[iosCode] = fileFS
+}
 
 var unigramModels sync.Map
 var bigramModels sync.Map
@@ -779,8 +782,12 @@ func loadLanguageModels(
 func loadProtobufData(language Language, ngramLength int) []byte {
 	ngramName := getNgramNameByLength(ngramLength)
 	isoCode := strings.ToLower(language.IsoCode639_1().String())
-	zipFilePath := fmt.Sprintf("language-models/%s/%ss.pb.bin.zip", isoCode, ngramName)
-	zipFileBytes, err := languageModels.ReadFile(zipFilePath)
+	fileFS, ok := languageModels[isoCode]
+	if !ok {
+		return nil
+	}
+	zipFilePath := fmt.Sprintf("%ss.pb.bin.zip", ngramName)
+	zipFileBytes, err := fileFS.ReadFile(zipFilePath)
 	if err != nil {
 		return nil
 	}
